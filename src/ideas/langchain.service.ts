@@ -9,6 +9,46 @@ export class LangChainService {
    * Call the Gemini HTTP API directly (no Google SDK) to generate ideas
    * and convert the response into an IdeaGraph-shaped object.
    */
+  /**
+   * Detect platform and content-type hints from the topic so we can restrict
+   * generated ideas to the user's specified platform/format when present.
+   */
+  private detectTopicFocus(topic: string): {
+    platforms: string[];
+    formats: string[];
+  } {
+    const t = topic.toLowerCase();
+    const platformMap: { keyword: string; label: string }[] = [
+      { keyword: "instagram", label: "Instagram" },
+      { keyword: "tiktok", label: "TikTok" },
+      { keyword: "youtube", label: "YouTube" },
+      { keyword: "linkedin", label: "LinkedIn" },
+      { keyword: "twitter", label: "Twitter/X" },
+      { keyword: " x ", label: "Twitter/X" },
+      { keyword: "facebook", label: "Facebook" },
+    ];
+    const formatMap: { keyword: string; label: string }[] = [
+      { keyword: "reel", label: "Video" },
+      { keyword: "reels", label: "Video" },
+      { keyword: "carousel", label: "Carousel" },
+      { keyword: "video", label: "Video" },
+      { keyword: "short", label: "Short" },
+      { keyword: "story", label: "Story" },
+      { keyword: "stories", label: "Story" },
+      { keyword: "photo", label: "Photo" },
+      { keyword: "graphic", label: "Graphics" },
+    ];
+    const platforms = platformMap
+      .filter(({ keyword }) => t.includes(keyword))
+      .map(({ label }) => label);
+    const formats = formatMap
+      .filter(({ keyword }) => t.includes(keyword))
+      .map(({ label }) => label);
+    const uniquePlatforms = Array.from(new Set(platforms));
+    const uniqueFormats = Array.from(new Set(formats));
+    return { platforms: uniquePlatforms, formats: uniqueFormats };
+  }
+
   async generateIdeas(topic: string): Promise<{
     nodes: any[];
     edges: any[];
@@ -18,6 +58,22 @@ export class LangChainService {
     if (!apiKey) {
       throw new Error("GEMINI_API_KEY is not set");
     }
+
+    const { platforms: topicPlatforms, formats: topicFormats } =
+      this.detectTopicFocus(topic);
+    const hasPlatformFocus = topicPlatforms.length > 0;
+    const hasFormatFocus = topicFormats.length > 0;
+    const focusInstruction =
+      hasPlatformFocus || hasFormatFocus
+        ? `
+IMPORTANT - The topic explicitly mentions preferred channel or content type:
+${hasPlatformFocus ? `- Generate ideas ONLY for these platforms: ${topicPlatforms.join(", ")}.` : ""}
+${hasFormatFocus ? `- Generate ideas ONLY for these content types: ${topicFormats.join(", ")}.` : ""}
+Do not mix in other platforms or formats; stick to what the user asked for.
+`
+        : `
+- Mix different platforms (Instagram, TikTok, YouTube, LinkedIn, Twitter/X, Facebook) and content types (graphics, carousel, video, photo, short, story).
+`;
 
 //     const prompt = `
 // You are an expert content strategist and idea generation specialist.
@@ -51,7 +107,7 @@ export class LangChainService {
 You are ScodAI, an elite AI content strategist and idea graph architect.
 
 Your mission:
-Generate a **week's worth of content plans** (at least 14 strong ideas) for the topic below.
+Generate a **week's worth of content plans** (at least 7-14 strong ideas) for the topic below.
 Each plan should feel like a standalone, publish‑ready idea.
 
 You must:
@@ -60,8 +116,7 @@ You must:
 - Ensure ideas are original and non-generic
 - Avoid repetition and fluff
 - Make ideas practical and execution-ready
-- Mix different platforms and content types (graphics, carousel, video, photo, short, story)
-
+${focusInstruction}
 CRITICAL FOR VIDEO / REEL IDEAS:
 - Many ideas should be best suited for Instagram or TikTok video / reels.
 - For those ideas, the description MUST read like a clear example script and
@@ -143,7 +198,7 @@ Topic: ${topic}
       const numbered = lines.filter((l) => /^\d+[\).\s]/.test(l));
       const ideaLines = numbered.length > 0 ? numbered : lines;
 
-      const platforms = [
+      const allPlatforms = [
         "Instagram",
         "TikTok",
         "YouTube",
@@ -151,14 +206,17 @@ Topic: ${topic}
         "Twitter/X",
         "Facebook",
       ];
-
-      const formats = [
+      const allFormats = [
         "Carousel",
         "Video",
         "Photo",
         "Short",
         "Story",
+        "Graphics",
       ];
+      const platforms =
+        topicPlatforms.length > 0 ? topicPlatforms : allPlatforms;
+      const formats = topicFormats.length > 0 ? topicFormats : allFormats;
 
       const nodes = ideaLines.map((line, index) => {
         const cleaned = line.replace(/^\d+[\).\s]*/, "").trim();

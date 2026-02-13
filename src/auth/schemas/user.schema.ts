@@ -17,7 +17,7 @@ export class User {
   @Prop()
   avatar?: string;
 
-  @Prop({ default: 10 })
+  @Prop({ default: 5 })
   credits: number;
 }
 
