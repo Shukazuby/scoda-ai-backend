@@ -5,21 +5,9 @@ import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { cors: { origin: '*' } });
 
-  // Enable CORS
-  const corsOrigin = process.env.CORS_ORIGIN || "http://localhost:3000";
-  app.enableCors({
-    origin: [
-      corsOrigin,
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://127.0.0.1:3000",
-    ],
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  });
+  app.enableCors();
 
   // Global validation pipe
   app.useGlobalPipes(
