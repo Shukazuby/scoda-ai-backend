@@ -36,8 +36,8 @@ export class AuthService {
     const user = new this.userModel({
       name,
       email,
-      password: hashedPassword,
-      credits: 10,
+      password: hashedPassword
+      // credits: 10,
     });
 
     await user.save();

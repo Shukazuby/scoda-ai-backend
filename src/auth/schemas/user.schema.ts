@@ -18,7 +18,7 @@ export class User {
   avatar?: string;
 
   @Prop({ default: 5 })
-  credits: number;
+  credits?: number;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
