@@ -3,12 +3,8 @@ import { ConfigService } from "@nestjs/config";
 
 @Injectable()
 export class LangChainService {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) { }
 
-  /**
-   * Call the Gemini HTTP API directly (no Google SDK) to generate ideas
-   * and convert the response into an IdeaGraph-shaped object.
-   */
   /**
    * Detect platform and content-type hints from the topic so we can restrict
    * generated ideas to the user's specified platform/format when present.
@@ -75,81 +71,56 @@ Do not mix in other platforms or formats; stick to what the user asked for.
 - Mix different platforms (Instagram, TikTok, YouTube, LinkedIn, Twitter/X, Facebook) and content types (graphics, carousel, video, photo, short, story).
 `;
 
-//     const prompt = `
-// You are an expert content strategist and idea generation specialist.
-
-// Your job is to generate structured, creative, and practical content plans based on a given topic.
-
-// You must:
-// - Think strategically
-// - Organize ideas clearly
-// - Avoid fluff
-// - Avoid repetition
-// - Ensure ideas are actionable
-
-// Format for each idea:
-// - Return a numbered list.
-// - Each item MUST be exactly one line in this format:
-//   "<Title> - <Description>"
-// - Title: a short, catchy label for the idea.
-// - Description: a richer piece of content that could be used directly
-//   as a caption, video or voiceover script, or any other content that helps
-//   the user talk about the topic. It can be multiple sentences.
-
-// Do NOT include any extra commentary or markdown, just the numbered lines.
-
-// Topic: ${topic}
-// `;
-
-    // ✅ Use a currently supported model name
-   
     const prompt = `
-You are ScodAI, an elite AI content strategist and idea graph architect.
+You are Scoda AI, an elite AI content strategist, digital marketer, and digital content creator.
 
 Your mission:
-Generate a **week's worth of content plans** (at least 7-14 strong ideas) for the topic below.
+Generate a **week's worth of content plans** (at least 7 strong ideas) for the topic below.
 Each plan should feel like a standalone, publish‑ready idea.
 
 You must:
-- Think like a senior content strategist
-- Break the topic into interesting angles
+- Think like a senior content strategist, senior digital marketer and senior digital content creator
+- Break the topic into interesting angles and create a content plan for each angle
 - Ensure ideas are original and non-generic
 - Avoid repetition and fluff
 - Make ideas practical and execution-ready
+- Create a content plan for each angle
 ${focusInstruction}
 CRITICAL FOR VIDEO / REEL IDEAS:
 - Many ideas should be best suited for Instagram or TikTok video / reels.
-- For those ideas, the description MUST read like a clear example script and
-  explain how the video should look and flow (HOOK, scenes, B‑roll, on‑screen text).
-- Explicitly highlight the structure of the script in the description text so it
-  can be spotted easily (e.g. "HOOK:", "SCENE 1:", "B‑ROLL:", "CTA:").
+- For each such video/reel idea you MUST also generate a short script (see below).
 
 FORMAT RULES (STRICT):
 
-- Return ONLY a numbered list.
-- Each item MUST be exactly one line.
-- Each line MUST follow this format:
-
-"<Title> - <Description>"
-
-Where:
+PART 1 - Numbered ideas:
+- First, output a numbered list. Each item MUST be exactly one line.
+- Each line MUST follow: "<Title> - <Description>"
 - Title = short, punchy, under 80 characters.
-- Description = detailed explanation that could be directly used
-  as a caption, script, or talking point. It can be multiple sentences
-  but MUST remain on the same line.
+- Description = detailed explanation (caption, script hint, or talking point). One line only.
+
+PART 2 - Video scripts (only for video/reel/short ideas):
+- After the numbered list, add a blank line, then the line: VIDEO SCRIPTS:
+- For each idea that is a video/reel/short-style idea (by its number N), output a block exactly like this (one block per video idea, in order by N):
+
+N: HOOK: <one line - the opening hook, specific to this idea>
+SCENE 1: <one line - what happens in scene 1>
+SCENE 2: <one line - what happens in scene 2>
+SCENE 3: <one line - what happens in scene 3>
+CTA: <one line - call to action>
+
+- Replace N with the idea number (1, 2, 3...). Generate creative, specific script lines for that idea—not generic text. No blank line between the "N:" line and HOOK/SCENE/CTA lines; one blank line after each block before the next "N:".
+- Skip non-video ideas (e.g. carousel, static graphic). Only output blocks for ideas that are video/reel/short.
 
 DO NOT:
-- Add commentary
-- Add markdown
-- Add explanations
+- Add commentary or markdown outside the format above
+- Add explanations before or after the list
 - Mention "pillars" or "steps"
-- Add blank lines
 
 Topic: ${topic}
 `;
-    
+
     const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
-    
+
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -188,15 +159,40 @@ Topic: ${topic}
         throw new Error("Gemini returned an empty response");
       }
 
-      // Convert the numbered list into IdeaGraph nodes/edges
-      const lines = text
+      // Split response: idea list (before VIDEO SCRIPTS) and optional script blocks (after).
+      const videoScriptsMarker = /^\s*VIDEO SCRIPTS\s*:\s*$/im;
+      const parts = text.split(videoScriptsMarker);
+      const ideaListText = parts[0].trim();
+      const scriptsSection = parts[1]?.trim() ?? "";
+
+      const ideaListLines = ideaListText
         .split("\n")
         .map((l: string) => l.trim())
         .filter((l: string) => l.length > 0);
+      const numbered = ideaListLines.filter((l) => /^\d+[\).\s]/.test(l));
+      const ideaLines = numbered.length > 0 ? numbered : ideaListLines;
 
-      // Prefer lines starting with a number, but fall back to all non-empty lines.
-      const numbered = lines.filter((l) => /^\d+[\).\s]/.test(l));
-      const ideaLines = numbered.length > 0 ? numbered : lines;
+      // Parse VIDEO SCRIPTS section: blocks like "N: HOOK: ..." then "SCENE 1: ..." etc.
+      const scriptsByIdeaNumber: Record<number, string> = {};
+      const scriptBlockStart = /^(\d+):\s*HOOK:\s*/i;
+      const scriptLines = scriptsSection.split("\n");
+      let currentNum: number | null = null;
+      let currentBlock: string[] = [];
+      for (const line of scriptLines) {
+        const match = line.match(scriptBlockStart);
+        if (match) {
+          if (currentNum !== null && currentBlock.length > 0) {
+            scriptsByIdeaNumber[currentNum] = currentBlock.join("\n").trim();
+          }
+          currentNum = parseInt(match[1], 10);
+          currentBlock = [line];
+        } else if (currentNum !== null && line.length > 0) {
+          currentBlock.push(line);
+        }
+      }
+      if (currentNum !== null && currentBlock.length > 0) {
+        scriptsByIdeaNumber[currentNum] = currentBlock.join("\n").trim();
+      }
 
       const allPlatforms = [
         "Instagram",
@@ -241,33 +237,23 @@ Topic: ${topic}
         const platform = platforms[index % platforms.length];
         const format = formats[index % formats.length];
 
-        // If this looks like a video/reel idea (Instagram/TikTok + Video/Short/Story),
-        // generate an example script outline from the description.
         const isVideoLikePlatform =
           /instagram|tiktok/i.test(platform) &&
           /video|short|story/i.test(format);
 
-        let script: string | undefined;
-        if (isVideoLikePlatform) {
-          script = [
-            `HOOK: ${label}`,
-            "",
-            `SCENE 1: On-screen text with the main hook while you appear on camera introducing the idea.`,
-            `SCENE 2: B‑roll or screen recording that visually demonstrates the key point(s).`,
-            `SCENE 3: Close‑up shot summarising the main takeaway in one sentence.`,
-            `CTA: Ask viewers to comment their experience with "${topic}" or save the video for later.`,
-          ].join("\n");
-        }
+        const description =
+          descText || cleaned || `Generated idea ${index + 1} for ${topic}.`;
+
+        const ideaNumber = index + 1;
+        const script: string | undefined =
+          isVideoLikePlatform && scriptsByIdeaNumber[ideaNumber]
+            ? scriptsByIdeaNumber[ideaNumber]
+            : undefined;
 
         return {
           id: `idea-${index + 1}`,
           label,
-          // If model didn't follow the "<Title> - <Description>" format,
-          // fall back to using the full cleaned line as the description.
-          description:
-            descText ||
-            cleaned ||
-            `Generated idea ${index + 1} for ${topic}.`,
+          description,
           platform,
           format,
           script,
@@ -278,11 +264,11 @@ Topic: ${topic}
       const edges =
         nodes.length > 1
           ? nodes.slice(1).map((node, idx) => ({
-              id: `edge-${idx + 1}`,
-              source: "idea-1",
-              target: node.id,
-              type: idx < 2 ? ("hierarchical" as const) : ("related" as const),
-            }))
+            id: `edge-${idx + 1}`,
+            source: "idea-1",
+            target: node.id,
+            type: idx < 2 ? ("hierarchical" as const) : ("related" as const),
+          }))
           : [];
 
       return {
@@ -296,7 +282,10 @@ Topic: ${topic}
       };
     } catch (error) {
       console.error("Error generating ideas with Gemini HTTP API:", error);
-      throw new Error("");
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Failed to generate ideas");
     }
   }
 }
