@@ -285,7 +285,7 @@ Topic: ${topic}
       if (error instanceof Error) {
         throw error;
       }
-      throw new Error("Failed to generate ideas");
+      throw new Error("Failed");
     }
   }
 }
