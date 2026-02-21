@@ -49,13 +49,18 @@ export class InsightsService {
       createdAt: { $gte: oneWeekAgo },
     });
 
+    const remainingCredits = user.credits ?? 0;
+    const initialCredits = 5;
+    const creditsUsed = Math.max(0, initialCredits - remainingCredits);
+
     return {
       totalIdeas,
       totalNodes,
       avgNodesPerIdea: Math.round(avgNodesPerIdea * 10) / 10,
       mostUsedCategory,
       ideasThisWeek,
-      creditsUsed: 100 - (user.credits || 100),
+      creditsUsed,
+      remainingCredits,
     };
   }
 
