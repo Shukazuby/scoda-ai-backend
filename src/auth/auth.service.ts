@@ -22,9 +22,10 @@ export class AuthService {
 
   async signup(signupDto: SignupDto) {
     const { name, email, password } = signupDto;
+    
 
     // Check if user already exists
-    const existingUser = await this.userModel.findOne({ email });
+    const existingUser = await this.userModel.findOne({ email: email.toLowerCase()});
     if (existingUser) {
       throw new ConflictException("User with this email already exists");
     }
@@ -35,7 +36,7 @@ export class AuthService {
     // Create user (start with 10 credits by default)
     const user = new this.userModel({
       name,
-      email,
+      email: email.toLowerCase(),
       password: hashedPassword
       // credits: 10,
     });
@@ -60,7 +61,7 @@ export class AuthService {
     const { email, password } = loginDto;
 
     // Find user
-    const user = await this.userModel.findOne({ email });
+    const user = await this.userModel.findOne({ email: email.toLowerCase() });
     if (!user) {
       throw new UnauthorizedException("Invalid credentials");
     }
@@ -102,7 +103,7 @@ export class AuthService {
     // Check if email is being changed and if it's already taken
     if (updateProfileDto.email !== user.email) {
       const existingUser = await this.userModel.findOne({
-        email: updateProfileDto.email,
+        email: updateProfileDto.email.toLowerCase(),
       });
       if (existingUser) {
         throw new ConflictException("Email already in use");
@@ -110,7 +111,7 @@ export class AuthService {
     }
 
     user.name = updateProfileDto.name;
-    user.email = updateProfileDto.email;
+    user.email = updateProfileDto.email.toLowerCase();
     await user.save();
 
     const userObj = user.toObject();
