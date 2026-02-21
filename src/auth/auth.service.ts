@@ -118,4 +118,14 @@ export class AuthService {
     delete userObj.password;
     return userObj;
   }
+
+  /** Permanently delete the user account. Caller must be authenticated. */
+  async deleteAccount(userId: string): Promise<{ message: string }> {
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+    await this.userModel.findByIdAndDelete(userId);
+    return { message: "Account deleted successfully" };
+  }
 }

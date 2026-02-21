@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Put,
+  Delete,
   Body,
   UseGuards,
   Request,
@@ -129,5 +130,22 @@ export class AuthController {
   @ApiResponse({ status: 401, description: "Unauthorized" })
   async logout() {
     return { message: "Logged out successfully" };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete("account")
+  @ApiBearerAuth("JWT-auth")
+  @ApiOperation({ summary: "Permanently delete the current user account" })
+  @ApiResponse({
+    status: 200,
+    description: "Account deleted successfully",
+    schema: {
+      example: { message: "Account deleted successfully" },
+    },
+  })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  @ApiResponse({ status: 404, description: "User not found" })
+  async deleteAccount(@Request() req) {
+    return this.authService.deleteAccount(req.user._id);
   }
 }
